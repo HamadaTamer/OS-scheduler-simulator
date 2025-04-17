@@ -358,11 +358,23 @@ void assignValue(char * line, struct MemoryWord *memory){
 }  
 
 
+void print_variable(const char* var) {
+    char* endptr;
 
+    // Try to convert the string to a long
+    long int_val = strtol(var, &endptr, 10);
+
+    // Check if the entire string was consumed by strtol
+    if (*endptr == '\0') {
+        printf("Integer detected: %ld\n", int_val);
+    } else {
+        printf("String detected: %s\n", var);
+    }
+}
 
 
 // essentially exexute for one clock cycle
-void execute_an_instruction(int PID, struct MemoryWord *memory){
+void execute_an_instruction( struct MemoryWord *memory){
     int pc = atoi(memory[3].arg1);
     int base = 8;  // because memory += 8 during parsing
     char *line = memory[base + pc].identifier;
@@ -379,8 +391,17 @@ void execute_an_instruction(int PID, struct MemoryWord *memory){
     }else if (strcmp(cmd, "print") == 0) {
         char *var = strtok(NULL, " \n");
         // lookup var and print
-    }else if (strcmp(cmd, "writeFile") == 0){
+        char * rhs = strtok(cmd," \n");
+        int loc = lookupValue(memory, rhs);
+        if (loc < 0) {
+            fprintf(stderr, "No variable with the given name\n");
+            exit(EXIT_FAILURE);
+        }    
+
+        print_variable(memory[loc].arg1);
         
+    }else if (strcmp(cmd, "writeFile") == 0){
+
 
     }else if(strcmp(cmd, "readFile") == 0){
         
