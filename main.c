@@ -5,6 +5,7 @@
 #include <ctype.h>
 
 
+
 /*
     create memory to store within it the code of a program, variables, PCB
     the memory will be divided into words where each word can be a PCB entry, program instructions, or variables in the form of a single name and the corresponding data ex: 
@@ -39,7 +40,7 @@
 
  */
 
-int MemorySize = 3;
+int MemorySize = 10;
 
 static int PCBID = 0; // a global counter of Process IDs in order to be tracked globally in other words ID to be used by next process initiated   
 
@@ -55,25 +56,10 @@ typedef enum{
     TERMINATED
 } process_state;
 
-typedef enum {
-    EXTRA_NONE,
-    EXTRA_INT,
-    EXTRA_STRING
-} variable_type_t;
-
-
-// a union is a structure that can hold either of 2 values and not both
-typedef union {
-    int   int_val;
-    char *str_val;
-} variable_data;
-
 struct MemoryWord{
-    char identifier[20];  
-    char arg1[20];
-    char arg2[20];
-    variable_type_t var_data_type ;
-    variable_data var_data;
+    char identifier[100];  
+    char arg1[100];
+    int arg2;
 };
 
 struct MemoryWord * createMemory(){
@@ -90,8 +76,27 @@ struct MemoryWord * createMemory(){
     return arr;
 }
 
+void dumpMemory(struct MemoryWord *memory) {
+    printf("── Memory Dump ───────────────────────────\n");
+    for (int i = 0; i < MemorySize; i++) {
+        if (atoi(memory[i].arg1) == 0)
+        printf("[%d]: id=\"%s\", arg1=\"%s\", arg2=%d\n",
+               i,
+               memory[i].identifier,
+               memory[i].arg1,
+               memory[i].arg2);
+        else
+            printf("[%d]: id=\"%s\", arg1=\"%d\", arg2=%d\n",
+                i,
+                memory[i].identifier,
+                memory[i].arg1,
+                memory[i].arg2);
+    }
+    
+    printf("───────────────────────────────────────────\n\n");
+}
 
-// parsing instructions into the memory and ending the instructions with an EOI identifier
+
 void parseProgram(char *filename, struct MemoryWord *memory) {
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -99,54 +104,31 @@ void parseProgram(char *filename, struct MemoryWord *memory) {
         exit(EXIT_FAILURE);
     }
 
+    memory += 8;  // skip first 8 words (reserved for PCB)
     char line[100];
     int index = 0;
 
     while (fgets(line, sizeof(line), file)) {
         char *trimmed = trim(line);
-        if (strlen(trimmed) == 0) continue;
+        if (strlen(trimmed) == 0) continue; // skip empty lines
 
-        char *cmd = strtok(trimmed, " \n");
-        if (!cmd) continue;
-
-        strcpy(memory[index].identifier, cmd);
-
-        if (strcmp(cmd, "print") == 0 || strcmp(cmd, "readFile") == 0 || strcmp(cmd, "semWait") == 0 || strcmp(cmd, "semSignal") == 0) {
-            char *arg = strtok(NULL, " \n");
-            if (!arg) {
-                fprintf(stderr, "Error: '%s' missing argument in line: %s\n", cmd, line);
-                exit(EXIT_FAILURE);
-            }
-            strcpy(memory[index].arg1, arg);
-        }
-        else if (strcmp(cmd, "assign") == 0 || strcmp(cmd, "writeFile") == 0 || strcmp(cmd, "printFromTo") == 0) {
-            char *arg1 = strtok(NULL, " \n");
-            char *arg2 = strtok(NULL, " \n");
-
-            if (!arg1 || !arg2) {
-                fprintf(stderr, "Error: '%s' missing arguments in line: %s\n", cmd, line);
-                exit(EXIT_FAILURE);
-            }
-
-            strcpy(memory[index].arg1, arg1);
-            strcpy(memory[index].arg2, arg2);
-        }
-        else {
-            fprintf(stderr, "Error: Unknown instruction '%s'\n", cmd);
+        if (index >= 60 - 8) { // protect memory overflow
+            fprintf(stderr, "Error: Program too large for memory\n");
             exit(EXIT_FAILURE);
         }
+
+        strncpy(memory[index].identifier, trimmed, sizeof(memory[index].identifier) - 1);
+        memory[index].identifier[sizeof(memory[index].identifier) - 1] = '\0';  // null-terminate
 
         index++;
-        if (index >= 60) {
-            fprintf(stderr, "Error: Memory overflow, too many instructions\n");
-            exit(EXIT_FAILURE);
-        }
     }
 
+    // Add EOI marker
     strcpy(memory[index].identifier, "EOI");
 
     fclose(file);
 }
+
 
 
 // creating the PCB
@@ -166,8 +148,6 @@ void createPCB(struct MemoryWord *memory, int priority){
     int i = 0;
 
     // finding EOI
-    while (strcmp(memory[i].identifier, "EOI") != 0) i++;
-    i++; // move to start of PCB area
 
     // Process ID
     strcpy(memory[i].identifier, "ID");
@@ -192,66 +172,229 @@ void createPCB(struct MemoryWord *memory, int priority){
     i++;
     strcpy(memory[i].identifier, "Memory_Bounds");
     sprintf(memory[i].arg1, "%d",memory - Memory_start_location );           // Lower bound 
-    sprintf(memory[i].arg2, "%d", memory + i + 3 - Memory_start_location);       // Upper bound
+
+    int j=0;
+    while (strcmp(memory[j].identifier, "EOI") != 0) j++;   // get location of last instruction
+
+    memory[i].arg2 =   memory + j - Memory_start_location;       // Upper bound
 }
 
 
-int main() {
-    // Step 1: Create the memory
-    struct MemoryWord* memory = createMemory();
-    if (!memory) {
-        printf("Memory creation failed!\n");
-        return 1;
+// this method looks in the memory for a variable and returns its offset in memory from beginning of program
+int lookupValue(struct MemoryWord *memory, const char *var) {
+    for (int i = 5; i < 8; i++) {
+        char *entry = memory[i].identifier;
+        if (strcmp( memory[i].identifier, var) == 0){
+            return i ;
+        }
+    }            
+    return -1;
+}
+
+
+void assignValue(char * line, struct MemoryWord *memory){
+    char *lhs = strtok(NULL, " \n");
+    char *rhs = strtok(NULL, " \n");
+    if (!lhs || !rhs ) {
+        perror("error in assign statement syntax");
+        EXIT_FAILURE;
     }
 
-    // Step 2: Call parseProgram() on a test file
-    // Make sure test_program.txt exists with test instructions
-    parseProgram("Program_1.txt", memory);
-
-    // Step 3: Print out memory contents to verify
-    printf("Parsed Memory Contents:\n");
-    for (int i = 0; i < 20; i++) {
-        //if (strlen(memory[i].identifier) == 0) break; // Stop at empty slot
-        printf("Memory[%d]: identifier = %s, arg1 = %s, arg2 = %s\n", i, memory[i].identifier, memory[i].arg1, memory[i].arg2);
-    }
-
-   
-        // Step 3: Create the PCB
-        printf("Creating PCB for the parsed program...\n");
-        int testPriority = 2;
-        createPCB(memory, testPriority);
-    
-        // Step 4: Print out the memory contents to verify
-        printf("\n===== Memory Dump =====\n");
-        for (int i = 0; i < 60; i++) {
-            // Only print if something is stored
-            if (strlen(memory[i].identifier) == 0) continue;
-     
-            printf("Memory[%02d]: ", i);
-    
-            // Label the section
-            if (strcmp(memory[i].identifier, "EOI") == 0) {
-                printf("== End of Instructions ==\n");
-                continue;
-            } else if (strcmp(memory[i].identifier, "ID") == 0) {
-                printf("[PCB] %s = %s\n", memory[i].identifier, memory[i].arg1);
-            } else if (strcmp(memory[i].identifier, "State") == 0 ||
-                       strcmp(memory[i].identifier, "Current_priority") == 0 ||
-                       strcmp(memory[i].identifier, "Program_counter") == 0) {
-                printf("[PCB] %s = %s\n", memory[i].identifier, memory[i].arg1);
-            } else if (strcmp(memory[i].identifier, "Memory_Bounds") == 0) {
-                printf("[PCB] %s = (%s -> %s)\n", memory[i].identifier, memory[i].arg1, memory[i].arg2);
-            } else {
-                // Default: print instruction
-                printf("[Instr] %s %s %s\n", memory[i].identifier, memory[i].arg1, memory[i].arg2);
+    if (strcmp(rhs,"input") == 0){
+            
+        
+        //search for empty variable position
+        int slot = -1;
+        int i;
+        for (i = 0; i < 4; i++) {
+            // print with newline so you see it immediately
+            //printf("checking slot %d → \"%s\"\n", i+5, memory[i+5].identifier);
+        
+            // test the _string_ emptiness, not the pointer
+            if (memory[i+5].identifier[0] == '\0') {
+                slot = i + 5;
+                printf("found empty slot at index %d\n", slot);
+                break;
             }
         }
-    
-     
-    
+        
+        if (slot < 0) {
+            fprintf(stderr, "Error: no place in memory for variables\n");
+            exit(EXIT_FAILURE);
+        }
 
-    // Step 4: Cleanup
-    free(memory);
-    return 0;
+        // take input for the variable
+        printf("Is the value of %s string or an integer:  (enter 0 for int, 1 for string)\n", lhs);
+
+        int x;
+        do{
+            scanf("%d", &x);
+            char * tmp[100];
+            if ( x!= 0 && x!= 1 ){
+                printf("0 or 1 bas yasta\n");
+            }
+        } while ( x != 0 && x != 1 );
+        
+        strcpy(memory[i+5].identifier ,lhs);
+        printf("Enter the value of %s \n", lhs);
+
+        switch (x){
+        case 0:
+                int tmp;
+                scanf("%d", &tmp);                       // read into a real int
+                sprintf(memory[slot].arg1, "%d", tmp); 
+                break;
+            case 1:
+                scanf("%s",&memory[i+5].arg1);
+        }
+            
+    }else if (strcmp(rhs,"readfile") == 0){
+        char *fv = strtok(NULL, " \n");
+        int flocation = lookupValue(memory, fv);
+        if ( flocation == -1) {
+            perror("variable not found");
+            EXIT_FAILURE;
+        }
+        char * fname = memory[flocation].arg1;
+        
+        //checking variable is a string variable
+        if (strlen(fname) == 0){
+            perror("variable chosen is not a string");
+            EXIT_FAILURE;
+        }
+        
+        // opening file with found name
+        FILE *f = fopen(fname, "r");
+        if (f) {
+            char tmp[100]; 
+            if (fgets(tmp, sizeof(tmp), f)) 
+                tmp[strcspn(tmp, "\n")]='\0';
+            fclose(f); 
+
+             //search for empty variable position
+            int slot = -1;
+            int i;
+            for (i = 0; i < 4; i++) {
+                // print with newline so you see it immediately
+                //printf("checking slot %d → \"%s\"\n", i+5, memory[i+5].identifier);
+            
+                // test the _string_ emptiness, not the pointer
+                if (memory[i+5].identifier[0] == '\0') {
+                    slot = i + 5;
+                    printf("found empty slot at index %d\n", slot);
+                    break;
+                }
+            }
+            
+            if (slot < 0) {
+                fprintf(stderr, "Error: no place in memory for variables\n");
+                exit(EXIT_FAILURE);
+            }
+            
+            // now `slot` is your empty spot
+            
+
+            strcpy(memory[slot].identifier ,lhs);
+            strcpy(memory[slot].arg1, tmp);
+
+        } else{
+
+            fprintf(stderr, "Error: cannot open file %s\n", fname);
+            EXIT_FAILURE;
+        }
+
+    }else {
+        char *endptr;
+        long ival = strtol(rhs, &endptr, 10);
+        int is_int = (*endptr == '\0');
+        size_t rlen = strlen(rhs);
+        int is_str = (rlen >= 2 && rhs[0]=='\"' && rhs[rlen-1]=='\"');
+
+        if (is_int || is_str) {
+            // find next free slot in memory[5..8]
+            int slot = -1;
+            for (int i = 5; i < 8; i++) {
+                if (memory[i].identifier[0] == '\0') {
+                    slot = i;
+                    break;
+                }
+            }
+            if (slot == -1) {
+                perror("no place in memory for variables");
+                exit(EXIT_FAILURE);
+            }
+
+            // store the variable name
+            strncpy(memory[slot].identifier,
+                    lhs,
+                    sizeof memory[slot].identifier - 1);
+            memory[slot].identifier[sizeof memory[slot].identifier - 1] = '\0';
+
+            if (is_int) {
+                // integer literal
+                sprintf(memory[slot].arg1,"%d" ,ival);
+            } else {
+                // string literal: strip the quotes
+                rhs[rlen-1] = '\0';
+                strncpy(memory[slot].arg1,
+                        rhs + 1,
+                        sizeof memory[slot].arg1 - 1);
+                memory[slot].arg1[sizeof memory[slot].arg1 - 1] = '\0';
+            }
+        }
+    }
+
+}  
+
+
+
+
+
+// essentially exexute for one clock cycle
+void execute_an_instruction(int PID, struct MemoryWord *memory){
+    int pc = atoi(memory[3].arg1);
+    int base = 8;  // because memory += 8 during parsing
+    char *line = memory[base + pc].identifier;
+
+    // Copy line to avoid messing with original
+    char buffer[100];
+    strcpy(buffer, line);
+
+    char *cmd = strtok(buffer, " \n");
+    printf("%s",cmd);
+
+    if (strcmp(cmd, "assign") == 0) {
+        char *lhs = strtok(NULL, " \n");
+        char *rhs = strtok(NULL, " \n");
+
+        if (strcmp(rhs, "input") == 0) {
+            
+        }
+        else if (strcmp(rhs, "readFile") == 0) {
+            char *filenameVar = strtok(NULL, " \n");
+            // retrieve filenameVar, read, store result
+        }
+        else {
+            // assign literal or previously stored value
+        }
+    }else if (strcmp(cmd, "print") == 0) {
+        char *var = strtok(NULL, " \n");
+        // lookup var and print
+    }else if (strcmp(cmd, "writeFile") == 0){
+
+    }else if(strcmp(cmd, "readFile") == 0){
+        
+    }else if(strcmp(cmd, "printFromTo") == 0){
+ 
+    }else{
+        perror("command entered is not proper!!");
+    }
+
+    // Handle semWait, semSignal, etc...
+
+    // Finally increment PC
+    int currentPC = atoi(memory[3].arg1);
+    sprintf(memory[3].arg1, "%d", currentPC + 1);
 }
+
 
