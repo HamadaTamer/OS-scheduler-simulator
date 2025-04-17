@@ -45,6 +45,19 @@
         first 5 PCB, next 3 variables
         pass memory location of process to be executed
 
+        ** will treat each process as its starting location in memory **
+
+        in general we should have ready queue, blocking queue and current running process
+
+        FCFS: will have to have a queue that stores the programs in their order of arrival and only deques when the first program is done execution
+
+        round robin: have to have a queue where after every quanta we deque and enque
+
+        multi level feedback: 
+            1. will have to have 4 queues, first is of highest priority, then second and so on
+            2. quanta doubles with each level of queue except last queue it is round robin
+
+        scheduler will take the processes and their arrival times 
 
 
  */
@@ -53,27 +66,24 @@ int MemorySize = 20;
 
 static int PCBID = 0; // a global counter of Process IDs in order to be tracked globally in other words ID to be used by next process initiated   
 
+
+//makes memory globally accessible:
 struct MemoryWord *Memory_start_location;
+struct MemoryWord *Program_start_locations[3] = {0};
+
+
 
 // structs defining the memoryWord layout
-
-typedef enum{
-    NEW,
-    READY, 
-    RUNNING,
-    WAITING,
-    TERMINATED
-} process_state;
-
-struct MemoryWord{
-    char identifier[100];  
-    char arg1[100];
-    int arg2;
+struct program{
+    char programName[50];
+    int priority;
+    int arrivalTime;
 };
+
 
 struct MemoryWord * createMemory(){
 
-    
+
     // creating program memory
     struct MemoryWord *arr = calloc(60, sizeof *arr);
     Memory_start_location = arr;
@@ -394,8 +404,8 @@ void print_variable(const char* var) {
 }
 
 
-// essentially exexute for one clock cycle
-void execute_an_instruction( struct MemoryWord *memory){
+// execute one instruction from the process pointed at by given parameter, and return true if program finished execution
+bool execute_an_instruction( struct MemoryWord *memory){
     int pc = atoi(memory[3].arg1);
     int base = 8;  // because memory += 8 during parsing
     char *line = memory[base + pc].identifier;
@@ -451,67 +461,93 @@ void execute_an_instruction( struct MemoryWord *memory){
 
     // Finally increment PC
     sprintf(memory[3].arg1, "%d", pc + 1);
+    // return true if program finished execution
+    if (strcmp(memory[pc].identifier,"EOI") == 0 ) return true; 
+
+    return false;
 }
 
 
+void FCFS_algo(struct program *programList[] , int clockcycles,MemQueue readyQueue, MemQueue BlockingQueue){
+    
+    while(true){
+        for (int i = 0; i < sizeof(programList) / sizeof(struct program); i++){
+
+            // checking if a program should be added into memory
+            if (clockcycles == programList[i]->arrivalTime){
+                if (PCBID == 0)
+                    Program_start_locations[PCBID] = Memory_start_location;
+                else{
+                    Program_start_locations[PCBID] = Program_start_locations[PCBID-1]->arg2 +1;
+                }
+                struct memoryWord *curr_program_memory = Program_start_locations[PCBID];
+
+                // enquing the process into the ready queue
+                enqueue(&readyQueue,curr_program_memory);
+
+                //adding the program instructions into the memory
+                parseProgram( programList[i]->programName,curr_program_memory);
+                
+                //creating the programs PCB in memory
+                createPCB(curr_program_memory, programList[i]->priority);
+
+            }
+            //execute the process that has its turn
+            if (peek(&readyQueue != NULL)){
+                if (execute_an_instruction(peek(&readyQueue))){
+                    dequeue(&readyQueue);
+                }
+            }
+
+        }
+    
+    }
+    
+}
+
+void scheduler(struct program programList[] ){
+    // initialize ready queue, blocking queue, and running process
+    int clockCycles = 0;
+
+    struct MemoryWord *runningProcessLocation = NULL;
+    
+    MemQueue readyQueue;
+    initQueue(&readyQueue);
+
+    MemQueue BlockingQueue;
+    initQueue(&BlockingQueue);
+
+    //setting the scheduling algorithm
+    SCHEDULING_ALGORITHM algo = FCFS; 
+    switch (algo)
+    {
+    case FCFS:
+        FCFS_algo(programList,clockCycles,readyQueue, BlockingQueue);
+        break;
+    case RR:
+
+        break;
+    case MLFQ:
+
+        break;
+    }
+    
+    
+
+}
+
 int main() {
     // Create and zero memory
-    struct MemoryWord *memory = createMemory();
-    // Initialize PC at memory[3].arg1
-    strcpy(memory[3].arg1, "0");
+    Memory_start_location = createMemory();
 
-    // Test 1: assign via execute_an_instruction
-    // prepare instruction slot 8
-    strcpy(memory[8].identifier, "assign x 42");
-    printf("\n-- Executing 'assign x 42' --\n");
-    dumpMemory(memory);
-    execute_an_instruction(memory);
-    dumpMemory(memory);
-    int idx = lookupValue(memory, "x");
-    printf("Variable x stored at %d: %s\n", idx, memory[idx].arg1);
 
-    // reset PC
-    strcpy(memory[3].arg1, "0");
+    struct program programList[3] = {
+        {"Program_1.txt" , 2, 0},
+        {"Program_2.txt" , 2, 1},
+        {"Program_3.txt" , 2, 2}
+    };  
 
-    // Test 2: print via execute_an_instruction
-    strcpy(memory[8].identifier, "print x");
-    printf("\n-- Executing 'print x' --\n");
-    execute_an_instruction(memory);
-
-    // reset PC and prepare printFromTo
-    strcpy(memory[3].arg1, "0");
-    strcpy(memory[8].identifier, "printFromTo 5 7");
-    printf("\n-- Executing 'printFromTo 5 7' --\n");
-    execute_an_instruction(memory);
-
-    // Test writeFile
-    strcpy(memory[3].arg1, "0");
-    strcpy(memory[8].identifier, "writeFile out.txt Hello");
-    printf("\n-- Executing 'writeFile out.txt Hello' --\n");
-    execute_an_instruction(memory);
-    // verify file
-    char buf[100] = {0};
-    FILE *f = fopen("out.txt", "r");
-    if (f) { fgets(buf, sizeof(buf), f); fclose(f); }
-    printf("Contents of out.txt: %s\n", buf);
-
-    // Test readFile via assign
-    // create file
-    f = fopen("in.txt","w"); fprintf(f,"world\n"); fclose(f);
-    // set var fname
-    // int slot = findFreeSlot(memory);
-     strcpy(memory[5].identifier, "fname");
-     strcpy(memory[5].arg1, "in.txt");
-    // assign y readfile fname
-    strcpy(memory[3].arg1, "0");
-    strcpy(memory[8].identifier, "assign y readfile fname");
-    printf("\n-- Executing 'assign y readfile fname' --\n");
-    dumpMemory(memory);
-    execute_an_instruction(memory);
-    idx = lookupValue(memory, "y");
-    printf("Variable y: %s\n", memory[idx].arg1);
-
-    free(memory);
+    free(Memory_start_location);
     return 0;
 }
 
