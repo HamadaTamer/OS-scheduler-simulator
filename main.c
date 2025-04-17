@@ -191,6 +191,7 @@ void createPCB(struct MemoryWord *memory, int priority){
 
 // this method looks in the memory for a variable and returns its offset in memory from beginning of program
 int lookupValue(struct MemoryWord *memory, const char *var) {
+    dumpMemory(memory);
     for (int i = 5; i < 8; i++) {
         char *entry = memory[i].identifier;
         if (strcmp( memory[i].identifier, var) == 0){
@@ -198,6 +199,28 @@ int lookupValue(struct MemoryWord *memory, const char *var) {
         }
     }            
     return -1;
+}
+
+
+// helper: check if a file exists on disk
+bool fileExists(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (f) { fclose(f); return true; }
+    return false;
+}
+
+// helper: read entire file into one malloc'd string
+char *getFileContent(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+    char *result = malloc(size + 1);
+    fread(result, 1, size, f);
+    result[size] = '\0';
+    fclose(f);
+    return result;
 }
 
 
@@ -257,45 +280,43 @@ void assignValue(char * line, struct MemoryWord *memory){
     } else if (strcmp(rhs, "readfile") == 0) {
         char *fv = strtok(NULL, " \n");
         if (!fv) {
-            fprintf(stderr, "Syntax error: missing filename var\n");
-            exit(EXIT_FAILURE);
-        }
-    
-        int floc = lookupValue(memory, fv);
-        if (floc < 0) {
-            fprintf(stderr, "variable not found: %s\n", fv);
-            exit(EXIT_FAILURE);
-        }
-    
-        char *fname = memory[floc].arg1;
-        // 1) reject pure‐digit “filenames”
-        bool all_digits = true;
-        for (char *p = fname; *p; p++) {
-            if (!isdigit((unsigned char)*p)) {
-                all_digits = false;
-                break;
-            }
-        }
-        if (all_digits) {
-            fprintf(stderr, "variable chosen is not a string: %s\n", fv);
-            exit(EXIT_FAILURE);
-        }
-    
-        // 2) attempt to open
-        FILE *f = fopen(fname, "r");
-        if (!f) {
-            fprintf(stderr, "Error: cannot open file %s\n", fname);
+            fprintf(stderr, "Syntax error: missing filename or variable name\n");
             exit(EXIT_FAILURE);
         }
     
         char tmp[100] = {0};
-        if (fgets(tmp, sizeof tmp, f)) {
-            tmp[strcspn(tmp, "\n")] = '\0';
-        }
-        fclose(f);
-        
+        FILE *file = fopen(fv, "r");
     
-        // store into next free var slot [5..7]
+        if (file) {
+            // Happy case: `fv` is a direct filename
+            if (fgets(tmp, sizeof tmp, file)) {
+                tmp[strcspn(tmp, "\n")] = '\0';
+            }
+            fclose(file);
+        } else {
+            // Try treating `fv` as a variable name
+            int floc = lookupValue(memory, fv);
+            if (floc < 0) {
+                fprintf(stderr, "Error: '%s' is neither a file nor a valid variable\n", fv);
+                exit(EXIT_FAILURE);
+            }
+    
+            char *fname = memory[floc].arg1;
+    
+    
+            FILE *fi = fopen(fname, "r");
+            if (!fi) {
+                fprintf(stderr, "Error: cannot open file '%s'\n", fname);
+                exit(EXIT_FAILURE);
+            }
+    
+            if (fgets(tmp, sizeof tmp, fi)) {
+                tmp[strcspn(tmp, "\n")] = '\0';
+            }
+            fclose(fi);
+        }
+    
+        // Store the result in the next free memory slot [5..7]
         int slot = -1;
         for (int i = 5; i < 8; i++) {
             if (memory[i].identifier[0] == '\0') {
@@ -303,12 +324,12 @@ void assignValue(char * line, struct MemoryWord *memory){
                 break;
             }
         }
+    
         if (slot < 0) {
-            fprintf(stderr, "no place in memory for variables\n");
+            fprintf(stderr, "Error: no free memory slot available\n");
             exit(EXIT_FAILURE);
         }
     
-        // record the new variable
         strcpy(memory[slot].identifier, lhs);
         strcpy(memory[slot].arg1, tmp);
         memory[slot].arg2 = 0;
@@ -384,15 +405,15 @@ void execute_an_instruction( struct MemoryWord *memory){
     strcpy(buffer, line);
 
     char *cmd = strtok(buffer, " \n");
-    printf("%s",cmd);
+    printf("%s\n",cmd);
 
     if (strcmp(cmd, "assign") == 0) {
         assignValue(cmd, memory);
     }else if (strcmp(cmd, "print") == 0) {
         char *var = strtok(NULL, " \n");
         // lookup var and print
-        char * rhs = strtok(cmd," \n");
-        int loc = lookupValue(memory, rhs);
+        //char * rhs = strtok(cmd," \n");
+        int loc = lookupValue(memory, var);
         if (loc < 0) {
             fprintf(stderr, "No variable with the given name\n");
             exit(EXIT_FAILURE);
@@ -419,7 +440,8 @@ void execute_an_instruction( struct MemoryWord *memory){
     }else if(strcmp(cmd, "printFromTo") == 0){
         int x = atoi(strtok(NULL, " \n"));
         int y = atoi(strtok(NULL, " \n"));  
-        while(x<y){ printf("%d",x++);}
+        while(x <= y){ printf("%d ",x++);}
+        fflush(stdout);
     }else{
         perror("command entered is not proper!!");
         exit(EXIT_FAILURE);
@@ -428,7 +450,68 @@ void execute_an_instruction( struct MemoryWord *memory){
     // Handle semWait, semSignal, etc...
 
     // Finally increment PC
-    int currentPC = atoi(memory[3].arg1);
-    sprintf(memory[3].arg1, "%d", currentPC + 1);
+    sprintf(memory[3].arg1, "%d", pc + 1);
+}
+
+
+int main() {
+    // Create and zero memory
+    struct MemoryWord *memory = createMemory();
+    // Initialize PC at memory[3].arg1
+    strcpy(memory[3].arg1, "0");
+
+    // Test 1: assign via execute_an_instruction
+    // prepare instruction slot 8
+    strcpy(memory[8].identifier, "assign x 42");
+    printf("\n-- Executing 'assign x 42' --\n");
+    dumpMemory(memory);
+    execute_an_instruction(memory);
+    dumpMemory(memory);
+    int idx = lookupValue(memory, "x");
+    printf("Variable x stored at %d: %s\n", idx, memory[idx].arg1);
+
+    // reset PC
+    strcpy(memory[3].arg1, "0");
+
+    // Test 2: print via execute_an_instruction
+    strcpy(memory[8].identifier, "print x");
+    printf("\n-- Executing 'print x' --\n");
+    execute_an_instruction(memory);
+
+    // reset PC and prepare printFromTo
+    strcpy(memory[3].arg1, "0");
+    strcpy(memory[8].identifier, "printFromTo 5 7");
+    printf("\n-- Executing 'printFromTo 5 7' --\n");
+    execute_an_instruction(memory);
+
+    // Test writeFile
+    strcpy(memory[3].arg1, "0");
+    strcpy(memory[8].identifier, "writeFile out.txt Hello");
+    printf("\n-- Executing 'writeFile out.txt Hello' --\n");
+    execute_an_instruction(memory);
+    // verify file
+    char buf[100] = {0};
+    FILE *f = fopen("out.txt", "r");
+    if (f) { fgets(buf, sizeof(buf), f); fclose(f); }
+    printf("Contents of out.txt: %s\n", buf);
+
+    // Test readFile via assign
+    // create file
+    f = fopen("in.txt","w"); fprintf(f,"world\n"); fclose(f);
+    // set var fname
+    // int slot = findFreeSlot(memory);
+     strcpy(memory[5].identifier, "fname");
+     strcpy(memory[5].arg1, "in.txt");
+    // assign y readfile fname
+    strcpy(memory[3].arg1, "0");
+    strcpy(memory[8].identifier, "assign y readfile fname");
+    printf("\n-- Executing 'assign y readfile fname' --\n");
+    dumpMemory(memory);
+    execute_an_instruction(memory);
+    idx = lookupValue(memory, "y");
+    printf("Variable y: %s\n", memory[idx].arg1);
+
+    free(memory);
+    return 0;
 }
 

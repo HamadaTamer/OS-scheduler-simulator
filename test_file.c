@@ -101,7 +101,7 @@
    }
    
    /* ---- 5. assignValue – literals -----------------------------*/
-   static void  test_assignValue_int_and_string_literal(void)
+   static void test_assignValue_int_and_string_literal(void)
    {
        struct MemoryWord *mem = createMemory();
    
@@ -112,8 +112,7 @@
         dumpMemory(mem);
        assert(strcmp(mem[5].identifier, "foo") == 0);
        assert(strcmp(mem[5].arg1,       "42")  == 0);
-       printf("%d\n",atoi(mem[5].arg1));
-   
+       
        /* string literal ---------------------------------------------*/
        char l2[] = "assign bar \"hello\"";
        strtok(l2, " \n");
@@ -180,7 +179,7 @@
        strcpy(mem[9].identifier, "EOI");
    
        createPCB(mem, 1);
-       execute_an_instruction(0, mem);
+       execute_an_instruction(mem);
    
        assert(atoi(mem[3].arg1) == 1);
        cleanup(mem);
