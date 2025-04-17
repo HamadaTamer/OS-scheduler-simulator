@@ -401,12 +401,25 @@ void execute_an_instruction( struct MemoryWord *memory){
         print_variable(memory[loc].arg1);
         
     }else if (strcmp(cmd, "writeFile") == 0){
+        char * fileName = strtok(NULL, " \n");
+        char * fileContent = strtok(NULL, " \n");
 
+        FILE *fptr;
+        // Open a file in writing mode
+        fptr = fopen(fileName, "w");
+
+        // Write some text to the file
+        fprintf(fptr, fileContent);
+        // Close the file
+        fclose(fptr); 
 
     }else if(strcmp(cmd, "readFile") == 0){
-        
+        // no reason to read file and do nothing with it so can only logically be called with assign
+        printf("no reason to read file and do nothing with it so can only logically be called with assign unless en enta bethazar");
     }else if(strcmp(cmd, "printFromTo") == 0){
- 
+        int x = atoi(strtok(NULL, " \n"));
+        int y = atoi(strtok(NULL, " \n"));  
+        while(x<y){ printf("%d",x++);}
     }else{
         perror("command entered is not proper!!");
         exit(EXIT_FAILURE);
