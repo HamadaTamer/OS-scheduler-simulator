@@ -101,7 +101,7 @@
    }
    
    /* ---- 5. assignValue – literals -----------------------------*/
-   static void test_assignValue_int_and_string_literal(void)
+   static void  test_assignValue_int_and_string_literal(void)
    {
        struct MemoryWord *mem = createMemory();
    
@@ -109,14 +109,16 @@
        char l1[] = "assign foo 42";
        strtok(l1, " \n");                 /* dispatcher consumes "assign" */
        assignValue(l1, mem);              /* handler continues           */
-   
+        dumpMemory(mem);
        assert(strcmp(mem[5].identifier, "foo") == 0);
        assert(strcmp(mem[5].arg1,       "42")  == 0);
+       printf("%d\n",atoi(mem[5].arg1));
    
        /* string literal ---------------------------------------------*/
        char l2[] = "assign bar \"hello\"";
        strtok(l2, " \n");
        assignValue(l2, mem);
+       dumpMemory(mem);
    
        assert(strcmp(mem[6].identifier, "bar")   == 0);
        assert(strcmp(mem[6].arg1,       "hello") == 0);

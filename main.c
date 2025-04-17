@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 
 
@@ -38,9 +39,17 @@
     
     create 
 
+
+    scheduler:
+        global array storing starting positions of every process
+        first 5 PCB, next 3 variables
+        pass memory location of process to be executed
+
+
+
  */
 
-int MemorySize = 10;
+int MemorySize = 20;
 
 static int PCBID = 0; // a global counter of Process IDs in order to be tracked globally in other words ID to be used by next process initiated   
 
@@ -70,7 +79,7 @@ struct MemoryWord * createMemory(){
     Memory_start_location = arr;
     if (!arr){
         perror("failed to create memory ");
-        EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     return arr;
@@ -197,12 +206,10 @@ void assignValue(char * line, struct MemoryWord *memory){
     char *rhs = strtok(NULL, " \n");
     if (!lhs || !rhs ) {
         perror("error in assign statement syntax");
-        EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     if (strcmp(rhs,"input") == 0){
-            
-        
         //search for empty variable position
         int slot = -1;
         int i;
@@ -217,7 +224,6 @@ void assignValue(char * line, struct MemoryWord *memory){
                 break;
             }
         }
-        
         if (slot < 0) {
             fprintf(stderr, "Error: no place in memory for variables\n");
             exit(EXIT_FAILURE);
@@ -248,62 +254,67 @@ void assignValue(char * line, struct MemoryWord *memory){
                 scanf("%s",&memory[i+5].arg1);
         }
             
-    }else if (strcmp(rhs,"readfile") == 0){
+    } else if (strcmp(rhs, "readfile") == 0) {
         char *fv = strtok(NULL, " \n");
-        int flocation = lookupValue(memory, fv);
-        if ( flocation == -1) {
-            perror("variable not found");
-            EXIT_FAILURE;
+        if (!fv) {
+            fprintf(stderr, "Syntax error: missing filename var\n");
+            exit(EXIT_FAILURE);
         }
-        char * fname = memory[flocation].arg1;
-        
-        //checking variable is a string variable
-        if (strlen(fname) == 0){
-            perror("variable chosen is not a string");
-            EXIT_FAILURE;
+    
+        int floc = lookupValue(memory, fv);
+        if (floc < 0) {
+            fprintf(stderr, "variable not found: %s\n", fv);
+            exit(EXIT_FAILURE);
         }
-        
-        // opening file with found name
+    
+        char *fname = memory[floc].arg1;
+        // 1) reject pure‐digit “filenames”
+        bool all_digits = true;
+        for (char *p = fname; *p; p++) {
+            if (!isdigit((unsigned char)*p)) {
+                all_digits = false;
+                break;
+            }
+        }
+        if (all_digits) {
+            fprintf(stderr, "variable chosen is not a string: %s\n", fv);
+            exit(EXIT_FAILURE);
+        }
+    
+        // 2) attempt to open
         FILE *f = fopen(fname, "r");
-        if (f) {
-            char tmp[100]; 
-            if (fgets(tmp, sizeof(tmp), f)) 
-                tmp[strcspn(tmp, "\n")]='\0';
-            fclose(f); 
-
-             //search for empty variable position
-            int slot = -1;
-            int i;
-            for (i = 0; i < 4; i++) {
-                // print with newline so you see it immediately
-                //printf("checking slot %d → \"%s\"\n", i+5, memory[i+5].identifier);
-            
-                // test the _string_ emptiness, not the pointer
-                if (memory[i+5].identifier[0] == '\0') {
-                    slot = i + 5;
-                    printf("found empty slot at index %d\n", slot);
-                    break;
-                }
-            }
-            
-            if (slot < 0) {
-                fprintf(stderr, "Error: no place in memory for variables\n");
-                exit(EXIT_FAILURE);
-            }
-            
-            // now `slot` is your empty spot
-            
-
-            strcpy(memory[slot].identifier ,lhs);
-            strcpy(memory[slot].arg1, tmp);
-
-        } else{
-
+        if (!f) {
             fprintf(stderr, "Error: cannot open file %s\n", fname);
-            EXIT_FAILURE;
+            exit(EXIT_FAILURE);
         }
-
+    
+        char tmp[100] = {0};
+        if (fgets(tmp, sizeof tmp, f)) {
+            tmp[strcspn(tmp, "\n")] = '\0';
+        }
+        fclose(f);
+        
+    
+        // store into next free var slot [5..7]
+        int slot = -1;
+        for (int i = 5; i < 8; i++) {
+            if (memory[i].identifier[0] == '\0') {
+                slot = i;
+                break;
+            }
+        }
+        if (slot < 0) {
+            fprintf(stderr, "no place in memory for variables\n");
+            exit(EXIT_FAILURE);
+        }
+    
+        // record the new variable
+        strcpy(memory[slot].identifier, lhs);
+        strcpy(memory[slot].arg1, tmp);
+        memory[slot].arg2 = 0;
+        return;
     }else {
+
         char *endptr;
         long ival = strtol(rhs, &endptr, 10);
         int is_int = (*endptr == '\0');
@@ -364,23 +375,12 @@ void execute_an_instruction(int PID, struct MemoryWord *memory){
     printf("%s",cmd);
 
     if (strcmp(cmd, "assign") == 0) {
-        char *lhs = strtok(NULL, " \n");
-        char *rhs = strtok(NULL, " \n");
-
-        if (strcmp(rhs, "input") == 0) {
-            
-        }
-        else if (strcmp(rhs, "readFile") == 0) {
-            char *filenameVar = strtok(NULL, " \n");
-            // retrieve filenameVar, read, store result
-        }
-        else {
-            // assign literal or previously stored value
-        }
+        assignValue(cmd, memory);
     }else if (strcmp(cmd, "print") == 0) {
         char *var = strtok(NULL, " \n");
         // lookup var and print
     }else if (strcmp(cmd, "writeFile") == 0){
+        
 
     }else if(strcmp(cmd, "readFile") == 0){
         
@@ -388,6 +388,7 @@ void execute_an_instruction(int PID, struct MemoryWord *memory){
  
     }else{
         perror("command entered is not proper!!");
+        exit(EXIT_FAILURE);
     }
 
     // Handle semWait, semSignal, etc...
@@ -396,5 +397,4 @@ void execute_an_instruction(int PID, struct MemoryWord *memory){
     int currentPC = atoi(memory[3].arg1);
     sprintf(memory[3].arg1, "%d", currentPC + 1);
 }
-
 

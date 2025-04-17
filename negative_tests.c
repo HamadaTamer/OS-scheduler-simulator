@@ -10,7 +10,7 @@
  #include <stdlib.h>
  #include <sys/wait.h>
  #include <unistd.h>
- 
+
  #include "memory.h"
  
  /* ───────── helper: run a statement in a child and expect it to
@@ -127,4 +127,6 @@
      test_readfile_file_missing();
      test_parseProgram_overflow();
  }
- 
+ int main(){
+    run_negative_tests();
+ }
