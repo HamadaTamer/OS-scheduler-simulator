@@ -1,3 +1,5 @@
 semWait file
 writeFile myTest.txt x
 semSignal file
+assign x 10
+print x
