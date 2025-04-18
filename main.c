@@ -539,7 +539,7 @@ bool can_execute_instruction(struct MemoryWord* memory){
     strcpy(buffer, line);
 
     char *cmd = strtok(buffer, " \n"); 
-    if (strcmp(cmd, "semwait") == 0 ){
+    if (strcmp(cmd, "semWait") == 0 ){
         char * resource = strtok(NULL, " \n");
         Resources tmp; 
         if (strcmp(resource, "userInput") == 0)
@@ -566,7 +566,7 @@ MemQueue*  get_blocking_queue(struct MemoryWord* memory){
     strcpy(buffer, line);
 
     char *cmd = strtok(buffer, " \n"); 
-    if (strcmp(cmd, "semwait") == 0 ){
+    if (strcmp(cmd, "semWait") == 0 ){
         char * resource = strtok(NULL, " \n");
         Resources tmp; 
         if (strcmp(resource, "userInput") == 0)
@@ -593,7 +593,7 @@ void FCFS_algo(struct program programList[] , int clockcycles, int num_of_progra
                 if (PCBID == 0)
                     Program_start_locations[PCBID] = Memory_start_location;
                 else{
-                    printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
+                    //printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
                   Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
                 }
                 struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
@@ -640,7 +640,7 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
                 if (PCBID == 0)
                     Program_start_locations[PCBID] = Memory_start_location;
                 else{
-                    printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
+                    //printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
                   Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
                 }
                 struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
@@ -668,9 +668,12 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
             // continuing the execution of the current process
             // check if we can execute instruction and if so then we execute
             //dumpMemory(Memory_start_location);
+            int pc =  atoi(peek(readyQueue)[3].arg1)+8;
+            printf("trying    => Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier );
+                
             if (can_execute_instruction(current_process)){
                 int pc =  atoi(peek(readyQueue)[3].arg1)+8;
-                printf("Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier );
+                printf("executing => Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier );
                 //printQueue();
                 // checking if last instruction and resetting the quanta
                 // executing the instruction, will ready the corresponding blocked processes in case of semSignal  
@@ -686,15 +689,15 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
                         current_quanta = 0;
                     }
                 }
+                clockcycles++;
             }
             // if we cant execute an instruction it must be due to resource blocking so we must place in the appropriate blocked queue
             else{
-                enqueue(get_blocking_queue(current_process), dequeue(readyQueue));
+                enqueue(get_blocking_queue(current_process),  dequeue(readyQueue) );
                 current_quanta = 0;
 
             }                
         }
-        clockcycles++;
     }
 }
 
@@ -712,7 +715,7 @@ void scheduler(struct program programList[] , int num_of_Programs){
     for (size_t i = 0; i < NUM_RESOURCES; i++)
     {
         initQueue(&BlockingQueuesNotPtrs[i]);
-        BlockingQueues[i] = BlockingQueuesNotPtrs;
+        BlockingQueues[i] = &BlockingQueuesNotPtrs[i];
     }
     
     //setting the scheduling algorithm

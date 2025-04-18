@@ -1,5 +1,5 @@
-assign x readFile test.txt
-assign y  "HelloWorld"
+semWait file
 writeFile test.txt HelloWorld
+semSignal file
 assign content 15
 print content
