@@ -59,6 +59,10 @@
 
         scheduler will take the processes and their arrival times 
 
+        problem is in re-enqueuing previously blocked processes
+        what we can do then is:
+            in case we use RR / FCFS we can call a function that does this else call a function that does that
+
 
  */
 
@@ -66,6 +70,7 @@ int MemorySize = 60;
 
 static int PCBID = 0; // a global counter of Process IDs in order to be tracked globally in other words ID to be used by next process initiated   
 
+SCHEDULING_ALGORITHM algo;
 
 //makes memory globally accessible:
 struct MemoryWord *Memory_start_location;
@@ -584,31 +589,37 @@ MemQueue*  get_blocking_queue(struct MemoryWord* memory){
     }
 
 }
-void FCFS_algo(struct program programList[] , int clockcycles, int num_of_programs){
+
+void add_program_to_memory(struct program programList[] , int i){
+    if (PCBID == 0)
+        Program_start_locations[PCBID] = Memory_start_location;
+    else{
+        //printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
+    Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
+    }
+    struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
+
+    // enquing the process into the ready queue
+    enqueue(readyQueue,curr_program_memory, atoi(curr_program_memory[2].arg1) );
+
+    //adding the program instructions into the memory
+    parseProgram( programList[i].programName,curr_program_memory);
+
+    //creating the programs PCB in memory this also increments the PCBID
+    createPCB(curr_program_memory, programList[i].priority);
+    // printf("Clock %2d: Program %d (mem@%d) arrived and enqueued. Queue size=%d\n",clockcycles, i, curr_program_memory, readyQueue.rear - readyQueue.front - 1);
+    programList[i].arrivalTime = -1;
+}
+
+void FCFS_algo(struct program programList[] , int num_of_programs){
+    int clockcycles = 0;
     int completed = 0;
     while(completed < num_of_programs){
         for (int i = 0; i < num_of_programs; i++){
 
             // checking if a program should be added into memory
             if ( programList[i].arrivalTime != -1 && clockcycles == programList[i].arrivalTime){
-                if (PCBID == 0)
-                    Program_start_locations[PCBID] = Memory_start_location;
-                else{
-                    //printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
-                  Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
-                }
-                struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
-
-                // enquing the process into the ready queue
-                enqueue(readyQueue,curr_program_memory, atoi(curr_program_memory[2].arg1) );
-
-                //adding the program instructions into the memory
-                parseProgram( programList[i].programName,curr_program_memory);
-                
-                //creating the programs PCB in memory this also increments the PCBID
-                createPCB(curr_program_memory, programList[i].priority);
-               // printf("Clock %2d: Program %d (mem@%d) arrived and enqueued. Queue size=%d\n",clockcycles, i, curr_program_memory, readyQueue.rear - readyQueue.front - 1);
-                programList[i].arrivalTime = -1;
+               add_program_to_memory(programList, i);
             }
 
         }
@@ -627,8 +638,8 @@ void FCFS_algo(struct program programList[] , int clockcycles, int num_of_progra
 }
 
 
-void RR_algo(struct program programList[] , int clockcycles, int num_of_programs, int Quanta ){
-
+void RR_algo(struct program programList[] , int num_of_programs, int Quanta ){
+    int clockcycles = 0;
     // check arrivals first then move just executed process to back of queue
     int current_quanta = 0;
     int completed = 0;
@@ -638,24 +649,7 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
         for (int i = 0; i < num_of_programs; i++){
             // checking if a program should be added into memory
             if ( programList[i].arrivalTime != -1 && clockcycles == programList[i].arrivalTime){
-                if (PCBID == 0)
-                    Program_start_locations[PCBID] = Memory_start_location;
-                else{
-                    //printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
-                  Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
-                }
-                struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
-
-                // enquing the process into the ready queue
-                enqueue(readyQueue,curr_program_memory , atoi(curr_program_memory[2].arg1));
-
-                //adding the program instructions into the memory
-                parseProgram( programList[i].programName,curr_program_memory);
-                
-                //creating the programs PCB in memory this also increments the PCBID
-                createPCB(curr_program_memory, programList[i].priority);
-               // printf("Clock %2d: Program %d (mem@%d) arrived and enqueued. Queue size=%d\n",clockcycles, i, curr_program_memory, readyQueue.rear - readyQueue.front - 1);
-                programList[i].arrivalTime = -1;
+               add_program_to_memory(programList, i);
             }
 
         }
@@ -700,16 +694,42 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
                 current_quanta = 0;
 
             }                
+        }else{
+            clockcycles++;
         }
     }
 }
 
+void MLFQ_algo(struct program programList[],  int number_of_programs){
+    // start by initializing 4 queues with their quantas as 2 power their position in the array 
+    MemQueue MLFQ_queues_not_ptrs[4];
+    MemQueue *MLFQ_queues[4];
+    for (size_t i = 0; i < NUM_RESOURCES; i++){
+        initQueue(&MLFQ_queues_not_ptrs[i]);
+        MLFQ_queues[i] = &MLFQ_queues_not_ptrs[i];
+    }
+        
+    int completed =0;
+    int clockcycles = 0;
 
+    while(completed < number_of_programs){
+        for (int i = 0; i < number_of_programs; i++){
+            // checking if a program should be added into memory
+            if ( programList[i].arrivalTime != -1 && clockcycles == programList[i].arrivalTime){
+               add_program_to_memory(programList, i);
+            }
+        }
+        for (size_t i = 0; i < 4; i++){
+            if (peek(MLFQ_queues[i]) != NULL){
+
+            }
+        }
+        
+    }
+}
 
 void scheduler(struct program programList[] , int num_of_Programs){
     // initialize ready queue, blocking queue, and running process
-    int clockCycles = 0;
-
     struct MemoryWord *runningProcessLocation = NULL;
     
     initQueue(&readyQueueNotPtr);
@@ -722,15 +742,15 @@ void scheduler(struct program programList[] , int num_of_Programs){
     }
     
     //setting the scheduling algorithm
-    SCHEDULING_ALGORITHM algo = RR; 
+    algo = RR; 
     int quanta = 1; 
     switch (algo)
     {
     case FCFS:
-        FCFS_algo(programList,clockCycles, num_of_Programs);
+        FCFS_algo(programList, num_of_Programs);
         break;
     case RR:
-        RR_algo(programList, clockCycles, num_of_Programs,quanta );
+        RR_algo(programList, num_of_Programs,quanta );
         break;
     case MLFQ:
 
@@ -744,11 +764,17 @@ int main() {
     Memory_start_location = createMemory();
 
     
-
+    /*
+    struct program{
+        char programName[50];
+        int priority;
+        int arrivalTime;
+    };
+    */
     struct program programList[3] = {
-        {"tmp1.txt" , 2, 0},
-        {"tmp2.txt" , 2, 0},
-        {"tmp3.txt" , 2, 0}        
+        {"tmp1.txt" , 0, 0, },
+        {"tmp2.txt" , 0, 10, },
+        {"tmp3.txt" , 0, 0, }        
     };  
 
     scheduler(programList, 3);
