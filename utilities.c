@@ -75,7 +75,6 @@ struct MemoryWord* peek(MemQueue *q) {
 }
 
 
-
 typedef enum{
     NEW,
     READY, 

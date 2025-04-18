@@ -125,6 +125,27 @@ void dumpMemory(struct MemoryWord *memory) {
     printf("───────────────────────────────────────────\n\n");
 }
 
+// void printQueue() {
+//     if (readyQueue->front == -1) {
+//         printf("[empty]\n");
+//         return;
+//     }
+
+//     printf("Queue contents (front → rear):\n  ");
+//     int i = readyQueue->front;
+//     while (1) {
+//         struct MemoryWord *w = readyQueue->items[i];
+//         // print whatever you want from MemoryWord, e.g. its pid or address
+//         printf("%s ",w[0].arg1 );
+
+//         if (i == readyQueue->rear)
+//             break;
+
+//         printf("  →  ");
+//         i = (i + 1) % MAX_QSIZE;
+//     }
+//     printf("\n");
+// }
 
 void parseProgram(char *filename, struct MemoryWord *memory) {
     FILE *file = fopen(filename, "r");
@@ -649,8 +670,8 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
             //dumpMemory(Memory_start_location);
             if (can_execute_instruction(current_process)){
                 int pc =  atoi(peek(readyQueue)[3].arg1)+8;
-                printf("Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier  );
-                
+                printf("Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier );
+                //printQueue();
                 // checking if last instruction and resetting the quanta
                 // executing the instruction, will ready the corresponding blocked processes in case of semSignal  
                 if (execute_an_instruction(current_process)){
@@ -660,9 +681,10 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
                 }
                 else {
                     current_quanta++;
-                    if (current_quanta == Quanta)
+                    if (current_quanta == Quanta){
                         enqueue(readyQueue,dequeue(readyQueue) );
                         current_quanta = 0;
+                    }
                 }
             }
             // if we cant execute an instruction it must be due to resource blocking so we must place in the appropriate blocked queue
@@ -719,8 +741,8 @@ int main() {
 
     struct program programList[3] = {
         {"tmp1.txt" , 2, 0},
-        {"tmp2.txt" , 2, 1},
-        {"tmp3.txt" , 2, 2}        
+        {"tmp2.txt" , 2, 0},
+        {"tmp3.txt" , 2, 0}        
     };  
 
     scheduler(programList, 3);
