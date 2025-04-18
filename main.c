@@ -71,7 +71,16 @@ static int PCBID = 0; // a global counter of Process IDs in order to be tracked 
 struct MemoryWord *Memory_start_location;
 struct MemoryWord *Program_start_locations[3] = {0};
 
+// initializnig global queues for simple access
+MemQueue readyQueueNotPtr;
+MemQueue *readyQueue  ;
 
+MemQueue BlockingQueuesNotPtrs[NUM_RESOURCES];
+MemQueue *BlockingQueues[NUM_RESOURCES];
+
+
+// initializing the array to have 3 resources, and so that with the enum i can point to the corresponding resource in a readable format 
+bool Resources_availability[NUM_RESOURCES] = {true};   
 
 // structs defining the MemoryWord layout
 struct program{
@@ -79,6 +88,7 @@ struct program{
     int priority;
     int arrivalTime;
 };
+
 
 
 struct MemoryWord * createMemory(){
@@ -449,6 +459,38 @@ bool execute_an_instruction( struct MemoryWord *memory){
         int y = atoi(strtok(NULL, " \n"));  
         while(x <= y){ printf("%d ",x++);}
         fflush(stdout);
+    }else if (strcmp(cmd, "semWait") == 0){
+        char * resource = strtok(NULL, " \n");
+        Resources tmp; 
+        if (strcmp(resource, "userInput") == 0)
+            tmp = USER_INPUT;
+        else if (strcmp(resource, "userOutput") == 0)
+            tmp = USER_OUTPUT;
+        else if (strcmp(resource, "file") == 0)
+            tmp = FILE_ACCESS;
+        else {
+            perror("invalid resource allocation request");
+            exit(EXIT_FAILURE);
+        }
+        Resources_availability[tmp] = false;
+       
+    }else if (strcmp(cmd, "semSignal") == 0){
+        char * resource = strtok(NULL, " \n");
+        Resources tmp; 
+        if (strcmp(resource, "userInput") == 0)
+            tmp = USER_INPUT;
+        else if (strcmp(resource, "userOutput") == 0)
+            tmp = USER_OUTPUT;
+        else if (strcmp(resource, "file") == 0)
+            tmp = FILE_ACCESS;
+        else {
+            perror("invalid resource allocation request");
+            exit(EXIT_FAILURE);
+        }
+        Resources_availability[tmp] = true;
+        while( peek(BlockingQueues[tmp]) != NULL){
+            enqueue(readyQueue, dequeue(BlockingQueues[tmp]));
+        }
     }else{
         perror("command entered is not proper!!");
         exit(EXIT_FAILURE);
@@ -466,8 +508,61 @@ bool execute_an_instruction( struct MemoryWord *memory){
     return false;
 }
 
+bool can_execute_instruction(struct MemoryWord* memory){
+    int pc = atoi(memory[3].arg1);
+    int base = 8;  // because memory += 8 during parsing
+    char *line = memory[base + pc].identifier;
 
-void FCFS_algo(struct program programList[] , int clockcycles,MemQueue *readyQueue, MemQueue *BlockingQueue, int num_of_programs){
+    // Copy line to avoid messing with original
+    char buffer[100];
+    strcpy(buffer, line);
+
+    char *cmd = strtok(buffer, " \n"); 
+    if (strcmp(cmd, "semwait") == 0 ){
+        char * resource = strtok(NULL, " \n");
+        Resources tmp; 
+        if (strcmp(resource, "userInput") == 0)
+            tmp = USER_INPUT;
+        else if (strcmp(resource, "userOutput") == 0)
+            tmp = USER_OUTPUT;
+        else if (strcmp(resource, "file") == 0)
+            tmp = FILE_ACCESS;
+        else {
+            perror("invalid resource allocation request");
+            exit(EXIT_FAILURE);
+        }
+        return Resources_availability[tmp];            
+    }
+}
+
+MemQueue*  get_blocking_queue(struct MemoryWord* memory){
+    int pc = atoi(memory[3].arg1);
+    int base = 8;  // because memory += 8 during parsing
+    char *line = memory[base + pc].identifier;
+
+    // Copy line to avoid messing with original
+    char buffer[100];
+    strcpy(buffer, line);
+
+    char *cmd = strtok(buffer, " \n"); 
+    if (strcmp(cmd, "semwait") == 0 ){
+        char * resource = strtok(NULL, " \n");
+        Resources tmp; 
+        if (strcmp(resource, "userInput") == 0)
+            tmp = USER_INPUT;
+        else if (strcmp(resource, "userOutput") == 0)
+            tmp = USER_OUTPUT;
+        else if (strcmp(resource, "file") == 0)
+            tmp = FILE_ACCESS;
+        else {
+            perror("invalid resource allocation request");
+            exit(EXIT_FAILURE);
+        }
+        return BlockingQueues[tmp];            
+    }
+
+}
+void FCFS_algo(struct program programList[] , int clockcycles, int num_of_programs){
     int completed = 0;
     while(completed < num_of_programs){
         for (int i = 0; i < num_of_programs; i++){
@@ -499,11 +594,83 @@ void FCFS_algo(struct program programList[] , int clockcycles,MemQueue *readyQue
         if (peek(readyQueue) != NULL){
             int pc =  atoi(peek(readyQueue)[3].arg1)+8;
             printf("Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier  );
-            dumpMemory(Memory_start_location);
+            //dumpMemory(Memory_start_location);
             if (execute_an_instruction(peek(readyQueue))){
                 dequeue(readyQueue);
                 completed++;
             }
+        }
+        clockcycles++;
+    }
+}
+
+
+void RR_algo(struct program programList[] , int clockcycles, int num_of_programs, int Quanta ){
+
+    // check arrivals first then move just executed process to back of queue
+    int current_quanta = 0;
+    int completed = 0;
+    struct MemoryWord* current_process = NULL;    
+
+    while(completed < num_of_programs){
+        for (int i = 0; i < num_of_programs; i++){
+            // checking if a program should be added into memory
+            if ( programList[i].arrivalTime != -1 && clockcycles == programList[i].arrivalTime){
+                if (PCBID == 0)
+                    Program_start_locations[PCBID] = Memory_start_location;
+                else{
+                    printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
+                  Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
+                }
+                struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
+
+                // enquing the process into the ready queue
+                enqueue(readyQueue,curr_program_memory );
+
+                //adding the program instructions into the memory
+                parseProgram( programList[i].programName,curr_program_memory);
+                
+                //creating the programs PCB in memory this also increments the PCBID
+                createPCB(curr_program_memory, programList[i].priority);
+               // printf("Clock %2d: Program %d (mem@%d) arrived and enqueued. Queue size=%d\n",clockcycles, i, curr_program_memory, readyQueue.rear - readyQueue.front - 1);
+                programList[i].arrivalTime = -1;
+            }
+
+        }
+        //execute the process that has its turn
+        if (peek(readyQueue) != NULL){
+
+            // finding the next process to execute
+            if (current_quanta == 0){
+                current_process = peek(readyQueue);
+            }
+            // continuing the execution of the current process
+            // check if we can execute instruction and if so then we execute
+            //dumpMemory(Memory_start_location);
+            if (can_execute_instruction(current_process)){
+                int pc =  atoi(peek(readyQueue)[3].arg1)+8;
+                printf("Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier  );
+                
+                // checking if last instruction and resetting the quanta
+                // executing the instruction, will ready the corresponding blocked processes in case of semSignal  
+                if (execute_an_instruction(current_process)){
+                    dequeue(readyQueue);
+                    current_quanta = 0;
+                    completed++;
+                }
+                else {
+                    current_quanta++;
+                    if (current_quanta == Quanta)
+                        enqueue(readyQueue,dequeue(readyQueue) );
+                        current_quanta = 0;
+                }
+            }
+            // if we cant execute an instruction it must be due to resource blocking so we must place in the appropriate blocked queue
+            else{
+                enqueue(get_blocking_queue(current_process), dequeue(readyQueue));
+                current_quanta = 0;
+
+            }                
         }
         clockcycles++;
     }
@@ -517,41 +684,46 @@ void scheduler(struct program programList[] , int num_of_Programs){
 
     struct MemoryWord *runningProcessLocation = NULL;
     
-    MemQueue readyQueue;
-    initQueue(&readyQueue);
+    initQueue(&readyQueueNotPtr);
+    readyQueue = &readyQueueNotPtr;
 
-    MemQueue BlockingQueue;
-    initQueue(&BlockingQueue);
-
+    for (size_t i = 0; i < NUM_RESOURCES; i++)
+    {
+        initQueue(&BlockingQueuesNotPtrs[i]);
+        BlockingQueues[i] = BlockingQueuesNotPtrs;
+    }
+    
     //setting the scheduling algorithm
-    SCHEDULING_ALGORITHM algo = FCFS; 
+    SCHEDULING_ALGORITHM algo = RR; 
+    int quanta = 1; 
     switch (algo)
     {
     case FCFS:
-        FCFS_algo(programList,clockCycles,&readyQueue, &BlockingQueue, num_of_Programs);
+        FCFS_algo(programList,clockCycles, num_of_Programs);
         break;
     case RR:
-
+        RR_algo(programList, clockCycles, num_of_Programs,quanta );
         break;
     case MLFQ:
 
         break;
     }
     
-    
-
 }
 
 int main() {
     // Create and zero memory
     Memory_start_location = createMemory();
 
+    
 
-    struct program programList[1] = {
-        {"tmp1.txt" , 2, 2}
+    struct program programList[3] = {
+        {"tmp1.txt" , 2, 0},
+        {"tmp2.txt" , 2, 1},
+        {"tmp3.txt" , 2, 2}        
     };  
 
-    scheduler(programList, 1);
+    scheduler(programList, 3);
 
     free(Memory_start_location);
     return 0;

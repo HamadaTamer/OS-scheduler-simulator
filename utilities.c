@@ -75,6 +75,7 @@ struct MemoryWord* peek(MemQueue *q) {
 }
 
 
+
 typedef enum{
     NEW,
     READY, 
@@ -82,6 +83,14 @@ typedef enum{
     WAITING,
     TERMINATED
 } process_state;
+
+
+typedef enum{
+    FILE_ACCESS,
+    USER_INPUT,
+    USER_OUTPUT,
+    NUM_RESOURCES
+} Resources;
 
 typedef enum{
     FCFS,
