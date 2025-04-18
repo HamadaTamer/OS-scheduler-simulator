@@ -1,0 +1,3 @@
+semWait file
+writeFile myTest.txt x
+semSignal file
