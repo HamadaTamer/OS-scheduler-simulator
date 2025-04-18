@@ -1,0 +1,5 @@
+assign x readFile test.txt
+assign y  "HelloWorld"
+writeFile test.txt HelloWorld
+assign content 15
+print content

@@ -62,7 +62,7 @@
 
  */
 
-int MemorySize = 20;
+int MemorySize = 60;
 
 static int PCBID = 0; // a global counter of Process IDs in order to be tracked globally in other words ID to be used by next process initiated   
 
@@ -73,7 +73,7 @@ struct MemoryWord *Program_start_locations[3] = {0};
 
 
 
-// structs defining the memoryWord layout
+// structs defining the MemoryWord layout
 struct program{
     char programName[50];
     int priority;
@@ -201,7 +201,6 @@ void createPCB(struct MemoryWord *memory, int priority){
 
 // this method looks in the memory for a variable and returns its offset in memory from beginning of program
 int lookupValue(struct MemoryWord *memory, const char *var) {
-    dumpMemory(memory);
     for (int i = 5; i < 8; i++) {
         char *entry = memory[i].identifier;
         if (strcmp( memory[i].identifier, var) == 0){
@@ -287,7 +286,7 @@ void assignValue(char * line, struct MemoryWord *memory){
                 scanf("%s",&memory[i+5].arg1);
         }
             
-    } else if (strcmp(rhs, "readfile") == 0) {
+    } else if (strcmp(rhs, "readFile") == 0) {
         char *fv = strtok(NULL, " \n");
         if (!fv) {
             fprintf(stderr, "Syntax error: missing filename or variable name\n");
@@ -415,8 +414,6 @@ bool execute_an_instruction( struct MemoryWord *memory){
     strcpy(buffer, line);
 
     char *cmd = strtok(buffer, " \n");
-    printf("%s\n",cmd);
-
     if (strcmp(cmd, "assign") == 0) {
         assignValue(cmd, memory);
     }else if (strcmp(cmd, "print") == 0) {
@@ -462,50 +459,59 @@ bool execute_an_instruction( struct MemoryWord *memory){
     // Finally increment PC
     sprintf(memory[3].arg1, "%d", pc + 1);
     // return true if program finished execution
-    if (strcmp(memory[pc].identifier,"EOI") == 0 ) return true; 
+    //printf("this shit => %d\n", memory[pc+base].identifier);
+
+    if (strcmp(memory[pc+1+base].identifier,"EOI") == 0 ) return true; 
 
     return false;
 }
 
 
-void FCFS_algo(struct program *programList[] , int clockcycles,MemQueue readyQueue, MemQueue BlockingQueue){
-    
-    while(true){
-        for (int i = 0; i < sizeof(programList) / sizeof(struct program); i++){
+void FCFS_algo(struct program programList[] , int clockcycles,MemQueue *readyQueue, MemQueue *BlockingQueue, int num_of_programs){
+    int completed = 0;
+    while(completed < num_of_programs){
+        for (int i = 0; i < num_of_programs; i++){
 
             // checking if a program should be added into memory
-            if (clockcycles == programList[i]->arrivalTime){
+            if ( programList[i].arrivalTime != -1 && clockcycles == programList[i].arrivalTime){
                 if (PCBID == 0)
                     Program_start_locations[PCBID] = Memory_start_location;
                 else{
-                    Program_start_locations[PCBID] = Program_start_locations[PCBID-1]->arg2 +1;
+                    printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
+                  Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
                 }
-                struct memoryWord *curr_program_memory = Program_start_locations[PCBID];
+                struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
 
                 // enquing the process into the ready queue
-                enqueue(&readyQueue,curr_program_memory);
+                enqueue(readyQueue,curr_program_memory );
 
                 //adding the program instructions into the memory
-                parseProgram( programList[i]->programName,curr_program_memory);
+                parseProgram( programList[i].programName,curr_program_memory);
                 
-                //creating the programs PCB in memory
-                createPCB(curr_program_memory, programList[i]->priority);
-
-            }
-            //execute the process that has its turn
-            if (peek(&readyQueue != NULL)){
-                if (execute_an_instruction(peek(&readyQueue))){
-                    dequeue(&readyQueue);
-                }
+                //creating the programs PCB in memory this also increments the PCBID
+                createPCB(curr_program_memory, programList[i].priority);
+               // printf("Clock %2d: Program %d (mem@%d) arrived and enqueued. Queue size=%d\n",clockcycles, i, curr_program_memory, readyQueue.rear - readyQueue.front - 1);
+                programList[i].arrivalTime = -1;
             }
 
         }
-    
+        //execute the process that has its turn
+        if (peek(readyQueue) != NULL){
+            int pc =  atoi(peek(readyQueue)[3].arg1)+8;
+            printf("Clock %2d: Running prog %d, PC=%d, instr='%s'\n",clockcycles, atoi(peek(readyQueue)[0].arg1) ,pc,peek(readyQueue)[pc].identifier  );
+            dumpMemory(Memory_start_location);
+            if (execute_an_instruction(peek(readyQueue))){
+                dequeue(readyQueue);
+                completed++;
+            }
+        }
+        clockcycles++;
     }
-    
 }
 
-void scheduler(struct program programList[] ){
+
+
+void scheduler(struct program programList[] , int num_of_Programs){
     // initialize ready queue, blocking queue, and running process
     int clockCycles = 0;
 
@@ -522,7 +528,7 @@ void scheduler(struct program programList[] ){
     switch (algo)
     {
     case FCFS:
-        FCFS_algo(programList,clockCycles,readyQueue, BlockingQueue);
+        FCFS_algo(programList,clockCycles,&readyQueue, &BlockingQueue, num_of_Programs);
         break;
     case RR:
 
@@ -541,11 +547,11 @@ int main() {
     Memory_start_location = createMemory();
 
 
-    struct program programList[3] = {
-        {"Program_1.txt" , 2, 0},
-        {"Program_2.txt" , 2, 1},
-        {"Program_3.txt" , 2, 2}
+    struct program programList[1] = {
+        {"tmp1.txt" , 2, 2}
     };  
+
+    scheduler(programList, 1);
 
     free(Memory_start_location);
     return 0;
