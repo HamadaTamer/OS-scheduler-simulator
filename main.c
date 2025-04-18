@@ -510,7 +510,8 @@ bool execute_an_instruction( struct MemoryWord *memory){
         }
         Resources_availability[tmp] = true;
         while( peek(BlockingQueues[tmp]) != NULL){
-            enqueue(readyQueue, dequeue(BlockingQueues[tmp]));
+            struct MemoryWord *tmp2 =  dequeue(BlockingQueues[tmp]);
+            enqueue(readyQueue, tmp2, atoi(tmp2[2].arg1));
         }
     }else{
         perror("command entered is not proper!!");
@@ -599,7 +600,7 @@ void FCFS_algo(struct program programList[] , int clockcycles, int num_of_progra
                 struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
 
                 // enquing the process into the ready queue
-                enqueue(readyQueue,curr_program_memory );
+                enqueue(readyQueue,curr_program_memory, atoi(curr_program_memory[2].arg1) );
 
                 //adding the program instructions into the memory
                 parseProgram( programList[i].programName,curr_program_memory);
@@ -646,7 +647,7 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
                 struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
 
                 // enquing the process into the ready queue
-                enqueue(readyQueue,curr_program_memory );
+                enqueue(readyQueue,curr_program_memory , atoi(curr_program_memory[2].arg1));
 
                 //adding the program instructions into the memory
                 parseProgram( programList[i].programName,curr_program_memory);
@@ -685,7 +686,8 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
                 else {
                     current_quanta++;
                     if (current_quanta == Quanta){
-                        enqueue(readyQueue,dequeue(readyQueue) );
+                        struct MemoryWord *tmp=  dequeue(readyQueue);
+                        enqueue(readyQueue, tmp,atoi(tmp[2].arg1));
                         current_quanta = 0;
                     }
                 }
@@ -693,7 +695,8 @@ void RR_algo(struct program programList[] , int clockcycles, int num_of_programs
             }
             // if we cant execute an instruction it must be due to resource blocking so we must place in the appropriate blocked queue
             else{
-                enqueue(get_blocking_queue(current_process),  dequeue(readyQueue) );
+                struct MemoryWord *tmp=  dequeue(readyQueue);
+                enqueue(get_blocking_queue(current_process), tmp,atoi(tmp[2].arg1) );
                 current_quanta = 0;
 
             }                
