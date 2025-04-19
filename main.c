@@ -77,7 +77,7 @@ SCHEDULING_ALGORITHM algo;
 
 //makes memory globally accessible:
 struct MemoryWord *Memory_start_location;
-struct MemoryWord *Program_start_locations[3] = {0};
+static struct MemoryWord *Program_start_locations[MAX_PROGRAMS] = {0};
 
 // initializnig global queues for simple access
 MemQueue readyQueueNotPtr;
@@ -990,15 +990,13 @@ int main() {
         int arrivalTime;
     };
     */
-    struct program programList[5] = {
+    struct program programList[3] = {
         {"tmp1.txt" , 0, 0, },
         {"tmp2.txt" , 0, 2, },
-        {"tmp3.txt" , 0, 4, },
-        {"tmp4.txt" , 0, 6, },
-        {"tmp5.txt" , 0, 8, }        
+        {"tmp3.txt" , 0, 4, }
     };  
 
-    scheduler(programList, 5);
+    scheduler(programList, 3);
 
     free(Memory_start_location);
     return 0;
