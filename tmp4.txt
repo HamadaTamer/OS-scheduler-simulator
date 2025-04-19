@@ -3,5 +3,4 @@ printFromTo 10 15
 printFromTo 10 15
 printFromTo 10 15
 printFromTo 10 15
-printFromTo 10 15
 

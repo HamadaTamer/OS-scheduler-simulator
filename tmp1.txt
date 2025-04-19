@@ -1,5 +1,3 @@
-semWait file
-writeFile test.txt HelloWorld
-semSignal file
-assign content 15
-print content
+printFromTo 10 15
+printFromTo 10 15
+printFromTo 10 15

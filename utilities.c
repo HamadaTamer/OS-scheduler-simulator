@@ -5,7 +5,9 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <inttypes.h>   // for PRIu64
 #define MAX_QSIZE  60  // or whatever max you need
+
 
 char *ltrim(char *s)
 {
@@ -184,4 +186,16 @@ struct MemoryWord* dequeue(MemQueue *q) {
     q->items[0] = q->items[--q->size];
     heapifyDown(q, 0);
     return top;
+}
+
+void printQueue(MemQueue *q, int qid) {
+    printf("  [Q%d] size=%2d |", qid, q->size);
+    for (int j = 0; j < q->size; ++j) {
+        struct MemoryWord *mw = q->items[j].ptr;
+        printf(" (%s,pr=%d,seq=%" PRIu64 ")",
+               mw->arg1,
+               q->items[j].priority,
+               q->items[j].seqno);
+    }
+    printf("\n");
 }
