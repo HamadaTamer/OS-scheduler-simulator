@@ -265,12 +265,18 @@ void assignValue(char * line, struct MemoryWord *memory){
         exit(EXIT_FAILURE);
     }
 
-    if (strcmp(rhs, "input") == 0) {
-        // 1) find free slot in memory[5..7]
+    if (strcmp(rhs,"input") == 0){
+        //search for empty variable position
         int slot = -1;
-        for (int j = 5; j < 8; ++j) {
-            if (memory[j].identifier[0] == '\0') {
-                slot = j;
+        int i;
+        for (i = 0; i < 4; i++) {
+            // print with newline so you see it immediately
+            //printf("checking slot %d → \"%s\"\n", i+5, memory[i+5].identifier);
+        
+            // test the _string_ emptiness, not the pointer
+            if (memory[i+5].identifier[0] == '\0') {
+                slot = i + 5;
+                //printf("found empty slot at index %d\n", slot);
                 break;
             }
         }
@@ -278,29 +284,33 @@ void assignValue(char * line, struct MemoryWord *memory){
             fprintf(stderr, "Error: no place in memory for variables\n");
             exit(EXIT_FAILURE);
         }
-    
-        // 2) record the variable name
-        strncpy(memory[slot].identifier, lhs,
-                sizeof memory[slot].identifier - 1);
-        memory[slot].identifier[
-            sizeof memory[slot].identifier - 1] = '\0';
-    
-        // 3) prompt and read entire line, including spaces
-        printf("Enter the value of %s:\n", lhs);
-        char buf[200];
-        if (!fgets(buf, sizeof buf, stdin)) {
-            perror("input");
-            exit(EXIT_FAILURE);
+
+        // take input for the variable
+        printf("Is the value of %s string or an integer:  (enter 0 for int, 1 for string)\n", lhs);
+
+        int x;
+        do{
+            scanf("%d", &x);
+            char * tmp[100];
+            if ( x!= 0 && x!= 1 ){
+                printf("0 or 1 bas yasta\n");
+            }
+        } while ( x != 0 && x != 1 );
+        
+        strcpy(memory[i+5].identifier ,lhs);
+        printf("Enter the value of %s \n", lhs);
+
+        switch (x){
+        case 0:
+                int tmp;
+                scanf("%d", &tmp);                       // read into a real int
+                sprintf(memory[slot].arg1, "%d", tmp); 
+                break;
+            case 1:
+                scanf("%s",&memory[i+5].arg1);
         }
-        // strip trailing newline
-        buf[strcspn(buf, "\n")] = '\0';
-    
-        // 4) store verbatim in memory slot
-        strncpy(memory[slot].arg1, buf,
-                sizeof memory[slot].arg1 - 1);
-        memory[slot].arg1[
-            sizeof memory[slot].arg1 - 1] = '\0';
-    }else if (strcmp(rhs, "readFile") == 0) {
+            
+    } else if (strcmp(rhs, "readFile") == 0) {
         char *fv = strtok(NULL, " \n");
         if (!fv) {
             fprintf(stderr, "Syntax error: missing filename or variable name\n");
@@ -410,9 +420,9 @@ void print_variable(const char* var) {
 
     // Check if the entire string was consumed by strtol
     if (*endptr == '\0') {
-        printf("Integer variable : %ld\n", int_val);
+        printf("Integer detected: %ld\n", int_val);
     } else {
-        printf("String variable: %s\n", var);
+        printf("String detected: %s\n", var);
     }
 }
 
@@ -446,67 +456,30 @@ bool execute_an_instruction( struct MemoryWord *memory){
             exit(EXIT_FAILURE);
         }    
 
-        print_variable(memory[loc].arg1);
+        //print_variable(memory[loc].arg1);
         
-    }else if (strcmp(cmd, "writeFile") == 0) {
-        // Grab the two raw tokens
-        char *fileNameTok    = strtok(NULL, " \n");
-        char *fileContentTok = strtok(NULL, " \n");
-    
-        // Resolve filename: if it’s a variable, use its value; else use literal
-        int fnLoc = lookupValue(memory, fileNameTok);
-        char *fname = (fnLoc >= 0
-                       ? memory[fnLoc].arg1
-                       : fileNameTok);
-    
-        // Resolve content similarly
-        int fcLoc = lookupValue(memory, fileContentTok);
-        char *content = (fcLoc >= 0
-                         ? memory[fcLoc].arg1
-                         : fileContentTok);
-    
-        // Open and write
-        FILE *fptr = fopen(fname, "w");
-        if (!fptr) {
-            perror("writeFile: cannot open file");
-            exit(EXIT_FAILURE);
-        }
-        fprintf(fptr, "%s", content);
-        fclose(fptr);
-    }
-    else if(strcmp(cmd, "readFile") == 0){
+    }else if (strcmp(cmd, "writeFile") == 0){
+        char * fileName = strtok(NULL, " \n");
+        char * fileContent = strtok(NULL, " \n");
+
+        FILE *fptr;
+        // Open a file in writing mode
+        fptr = fopen(fileName, "w");
+
+        // Write some text to the file
+        fprintf(fptr, fileContent);
+        // Close the file
+        fclose(fptr); 
+
+    }else if(strcmp(cmd, "readFile") == 0){
         // no reason to read file and do nothing with it so can only logically be called with assign
         printf("no reason to read file and do nothing with it so can only logically be called with assign unless en enta bethazar");
-    }else if (strcmp(cmd, "printFromTo") == 0) {
-        // Fetch the two arguments as strings
-        char *arg1 = strtok(NULL, " \n");
-        char *arg2 = strtok(NULL, " \n");
-    
-        int x, y;
-    
-        // If arg1 is a variable in memory, use its value; else parse as literal
-        int loc1 = lookupValue(memory, arg1);
-        if (loc1 >= 0) {
-            x = atoi(memory[loc1].arg1);
-        } else {
-            x = atoi(arg1);
-        }
-    
-        // Same for arg2
-        int loc2 = lookupValue(memory, arg2);
-        if (loc2 >= 0) {
-            y = atoi(memory[loc2].arg1);
-        } else {
-            y = atoi(arg2);
-        }
-    
-        // Now print from x to y
-        while (x <= y) {
-            printf("%d ", x++);
-        }
+    }else if(strcmp(cmd, "printFromTo") == 0){
+        int x = atoi(strtok(NULL, " \n"));
+        int y = atoi(strtok(NULL, " \n"));  
+        while(x <= y){ printf("%d ",x++);}
         printf("\n");
-    }
-    else if (strcmp(cmd, "semWait") == 0){
+    }else if (strcmp(cmd, "semWait") == 0){
         char * resource = strtok(NULL, " \n");
         Resources tmp; 
         if (strcmp(resource, "userInput") == 0)
@@ -619,7 +592,7 @@ MemQueue*  get_blocking_queue(struct MemoryWord* memory){
     return NULL;          /* <<< and add a safe default here      */
 }
 
-void add_program_to_memory(struct program programList[] , int i, MemQueue *queue_to_be_used){
+void add_program_to_memory(static struct program programList[1] = { {"Program_1.txt", 0, 0} }; , int i, MemQueue *queue_to_be_used){
     if (PCBID == 0)
         Program_start_locations[PCBID] = Memory_start_location;
     else{
@@ -640,7 +613,7 @@ void add_program_to_memory(struct program programList[] , int i, MemQueue *queue
     programList[i].arrivalTime = -1;
 }
 
-void FCFS_algo(struct program programList[] , int num_of_programs){
+void FCFS_algo(static struct program programList[1] = { {"Program_1.txt", 0, 0} }; , int num_of_programs){
     int clockcycles = 0;
     int completed = 0;
     while(completed < num_of_programs){
@@ -666,7 +639,7 @@ void FCFS_algo(struct program programList[] , int num_of_programs){
 }
 
 
-void RR_algo(struct program programList[] , int num_of_programs, int Quanta ){
+void RR_algo(static struct program programList[1] = { {"Program_1.txt", 0, 0} }; , int num_of_programs, int Quanta ){
     int clockcycles = 0;
     // check arrivals first then move just executed process to back of queue
     int current_quanta = 0;
@@ -730,7 +703,7 @@ void RR_algo(struct program programList[] , int num_of_programs, int Quanta ){
 
 
 
-void MLFQ_algo(struct program programList[], int number_of_programs) {
+void MLFQ_algo(static struct program programList[1] = { {"Program_1.txt", 0, 0} };, int number_of_programs) {
     const int num_levels = 4;
     // initialize the 4 ready–queues
     for (int lvl = 0; lvl < num_levels; ++lvl) {
@@ -837,7 +810,7 @@ void MLFQ_algo(struct program programList[], int number_of_programs) {
 }
 
 
-void scheduler(struct program programList[] , int num_of_Programs){
+void scheduler(static struct program programList[1] = { {"Program_1.txt", 0, 0} }; , int num_of_Programs){
     // initialize ready queue, blocking queue, and running process
     struct MemoryWord *runningProcessLocation = NULL;
     
@@ -880,13 +853,13 @@ int main() {
         int arrivalTime;
     };
     */
-    struct program programList[3] = {
-          {"Program_1.txt" , 0, 0, },
+    static struct program programList[1] = { {"Program_1.txt", 0, 0} }; = {
+        {"Program_1.txt" , 0, 0, },
         {"Program_2.txt" , 0, 2, },
         {"Program_3.txt" , 0, 4, }
     };  
 
-    scheduler(programList, 3);
+    scheduler(programList, 1);
 
     free(Memory_start_location);
     return 0;

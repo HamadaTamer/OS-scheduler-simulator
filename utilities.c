@@ -154,7 +154,7 @@ void enqueue(MemQueue *q, struct MemoryWord *ptr, int priority) {
  */
 struct MemoryWord* peek(MemQueue *q) {
     if (isEmpty(q)) {
-        fprintf(stderr, "PriorityQueue is empty\n");
+        //fprintf(stderr, "PriorityQueue is empty\n");
         return NULL;
     }
     return q->items[0].ptr;
