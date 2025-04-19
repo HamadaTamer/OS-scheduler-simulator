@@ -1,3 +1,0 @@
-printFromTo 25 30
-printFromTo 10 15
-

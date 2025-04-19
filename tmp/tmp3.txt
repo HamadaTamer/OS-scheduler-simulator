@@ -1,4 +1,0 @@
-assign t 10
-print t
-printFromTo 1 7
-print t
