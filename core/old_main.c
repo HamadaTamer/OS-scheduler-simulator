@@ -4,14 +4,14 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
-
+#include "program.h"
 
 #include <pthread.h>
 #include "sim.h"
 
-static pthread_mutex_t sim_mtx = PTHREAD_MUTEX_INITIALIZER;
-static struct program *g_plist;
-static int g_plen;
+/* these *must* match whatever your old code used */
+struct program *g_plist = NULL;
+int            g_plen  = 0;
 
 
 
@@ -19,68 +19,6 @@ static int g_plen;
 int curr_level[MAX_PROGRAMS];
 int rem_quantum[MAX_PROGRAMS];
 
-
-/*
-    create memory to store within it the code of a program, variables, PCB
-    the memory will be divided into words where each word can be a PCB entry, program instructions, or variables in the form of a single name and the corresponding data ex: 
-        
-        state: "ready"
-        (variableName_dataType): (value) 
-        instruction: (some instruction) (unparsed) 
-
-    now each word should be how many bytes?? i suggest 30 bytes
-
-
-    Memory layout (60 words ):
-        Instructions (variable but is currently 7-9)  (i suggest we add an END instruction/ indicator after the instructions to indicate that the program is DONE)
-        PCB (5 values)
-        Variables ( we only need space for 3 variables )
-
-        since we have 3 programs we have to have 20 words/program
-
-    the memory will be in the form of allocating using calloc the required number of words each of which with the wanted size
-
-    
-    the struct will contain the following:
-        1. the program instructions in an array or sth 
-        2. the PCB inside the struct:  
-            Process ID (The process is given an ID when is being created)
-            Process State
-            Current Priority
-            Program Counter
-            Memory Boundaries
-    
-    create 
-
-
-    scheduler:
-        global array storing starting positions of every process
-        first 5 PCB, next 3 variables
-        pass memory location of process to be executed
-
-        ** will treat each process as its starting location in memory **
-
-        in general we should have ready queue, blocking queue and current running process
-
-        FCFS: will have to have a queue that stores the programs in their order of arrival and only deques when the first program is done execution
-
-        round robin: have to have a queue where after every quanta we deque and enque
-
-        multi level feedback: 
-            1. will have to have 4 queues, first is of highest priority, then second and so on
-            2. quanta doubles with each level of queue except last queue it is round robin
-
-        scheduler will take the processes and their arrival times 
-
-        problem is in re-enqueuing previously blocked processes
-        what we can do then is:
-            in case we use RR / FCFS we can call a function that does this else call a function that does that
-
-
- */
-
-
- 
 int MemorySize = 150;
 
 static int PCBID = 0; // a global counter of Process IDs in order to be tracked globally in other words ID to be used by next process initiated   
@@ -88,7 +26,7 @@ static int PCBID = 0; // a global counter of Process IDs in order to be tracked 
 SCHEDULING_ALGORITHM algo;
 
 //makes memory globally accessible:
-struct MemoryWord *Memory_start_location;
+extern struct MemoryWord *Memory_start_location;
 //  struct MemoryWord *Program_start_locations[MAX_PROGRAMS] = {0};
 
 // initializnig global queues for simple access
@@ -655,26 +593,56 @@ MemQueue*  get_blocking_queue(struct MemoryWord* memory){
     }
     return NULL;          /* <<< and add a safe default here      */
 }
-
-void add_program_to_memory(struct program programList[] , int i, MemQueue *queue_to_be_used){
-    if (PCBID == 0)
-        Program_start_locations[PCBID] = Memory_start_location;
-    else{
-        //printf("offset => %d\n ",Program_start_locations[PCBID-1][4].arg2 +1 );
-    Program_start_locations[PCBID] =Memory_start_location +Program_start_locations[PCBID-1][4].arg2 +1  ;
+void add_program_to_memory(struct program programList[],int idx,MemQueue *queue_to_be_used){
+    /* sanity checks */
+    if (!g_plist) {
+        fprintf(stderr,
+            "[ERROR] add_program_to_memory: g_plist is NULL! "
+            "Did you forget to set it in sim_init()?\n");
     }
-    struct MemoryWord *curr_program_memory = Program_start_locations[PCBID];
+    if (idx < 0 || idx >= g_plen) {
+        fprintf(stderr,
+            "[ERROR] add_program_to_memory: idx=%d out of [0..%d)\n",
+            idx, g_plen);
+    }
 
-    // enquing the process into the ready queue
-    enqueue(queue_to_be_used,curr_program_memory, atoi(curr_program_memory[2].arg1) );
+    /* compute the base of this program’s memory block */
+    if (PCBID == 0) {
+        Program_start_locations[PCBID] = Memory_start_location;
+    } else {
+        Program_start_locations[PCBID] =
+          Memory_start_location
+          + Program_start_locations[PCBID-1][4].arg2
+          + 1;
+    }
+    struct MemoryWord *curr_program_memory =
+      Program_start_locations[PCBID];
 
-    //adding the program instructions into the memory
-    parseProgram( programList[i].programName,curr_program_memory);
+    fprintf(stderr,
+        "[DBG+] add_program_to_memory(programList=%p, idx=%d, queue=%p)\n"
+        "      PCBID=%d, curr_prog_mem=%p\n",
+        (void*)programList,
+        idx,
+        (void*)queue_to_be_used,
+        PCBID,
+        (void*)curr_program_memory
+    );
 
-    //creating the programs PCB in memory this also increments the PCBID
-    createPCB(curr_program_memory, programList[i].priority);
-    // printf("Clock %2d: Program %d (mem@%d) arrived and enqueued. Queue size=%d\n",clockcycles, i, curr_program_memory, readyQueue.rear - readyQueue.front - 1);
-    programList[i].arrivalTime = -1;
+    /* enqueue into the ready queue */
+    enqueue(queue_to_be_used,
+            curr_program_memory,
+            atoi(curr_program_memory[2].arg1));
+
+    /* actually load the instructions into memory */
+    parseProgram(programList[idx].programName,
+                 curr_program_memory);
+
+    /* create the PCB (this will bump PCBID internally) */
+    createPCB(curr_program_memory,
+              programList[idx].priority);
+
+    /* mark it as “arrived” so we won’t re‑enqueue it next tick */
+    programList[idx].arrivalTime = -1;
 }
 
 void FCFS_algo(struct program programList[] , int num_of_programs){

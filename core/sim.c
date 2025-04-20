@@ -12,6 +12,13 @@ bool Resources_availability[NUM_RESOURCES] = { true, true, true };
 struct MemoryWord *Program_start_locations[MAX_PROGRAMS] = { 0 };
 
 
+
+#define MEM_POOL_WORDS 256
+
+static struct MemoryWord _sim_memory_pool[MEM_POOL_WORDS];
+struct MemoryWord *Memory_start_location = NULL;
+
+
 #include "program.h"
 #define MAX_PROGRAMS 100
 /* ───────── GLOBAL ENGINE STATE ───────── */
@@ -75,6 +82,7 @@ void sim_init(struct program list[], int n,
 {    
     sim_reset();
 
+
     pthread_mutex_lock(&sim_mtx);
     fprintf(stderr, "[DEBUG] sim_init: plist=%p, n=%d\n", (void*)list, n);
     for(int i=0;i<n;i++){
@@ -83,14 +91,26 @@ void sim_init(struct program list[], int n,
                     list[i].arrivalTime);
     }
 
-
+    Memory_start_location = _sim_memory_pool;
+    fprintf(stderr,
+        "[DEBUG] sim_init: Memory_start_location=%p (pool at %p..%p)\n",
+        (void*)Memory_start_location,
+        (void*)_sim_memory_pool,
+        (void*)(&_sim_memory_pool[MEM_POOL_WORDS-1])
+    );
+    
     plist     = list;
     plen      = n;
     g_alg     = alg;
     g_quantum = quantum;
 
-    initQueue(&S.ready);
 
+    initQueue(&S.ready);
+    
+    extern struct program *g_plist;
+    extern int            g_plen;
+    g_plist = plist;
+    g_plen  = plen;
     if(alg == MLFQ){
         for(int i=0;i<4;i++) initQueue(&S.q[i]);
         for(int p=0;p<MAX_PROGRAMS;p++){
@@ -188,12 +208,15 @@ int sim_step(SimSnapshot *out)
 static void step_fcfs(void)
 {
     for(int i=0;i<plen;i++)
-        if(plist[i].arrivalTime!=-1 && clk==plist[i].arrivalTime)
+        if(plist[i].arrivalTime!=-1 && clk==plist[i].arrivalTime){
             add_program_to_memory(plist,i,&S.ready);
-
+            fprintf(stderr,"[DBG] step_fcfs: queued pid=%d, Program_start_locations[%d]=%p\n",i, i, (void*)Program_start_locations[i]);
+        }   
     if(!isEmpty(&S.ready)){
-        struct MemoryWord *p = peek(&S.ready);
+        struct MemoryWord *p = peek(&S.ready);        
+        fprintf(stderr,"[DBG] step_fcfs: about to exec pid=%s ",p->arg1);
         if(execute_an_instruction(p)){
+            fprintf(stderr,"[DBG] step_fcfs: pid %s just terminated\n", p->arg1);
             dequeue(&S.ready);
             finished++;
         }
