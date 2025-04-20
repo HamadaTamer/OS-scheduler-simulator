@@ -74,6 +74,9 @@ void sim_reset(void)
     pthread_mutex_lock(&sim_mtx);
     memset(&S,0,sizeof S);
     clk = finished = 0;
+    /* clear all program‐memory pointers */
+    for(int i = 0; i < MAX_PROGRAMS; i++)
+        Program_start_locations[i] = NULL;
     pthread_mutex_unlock(&sim_mtx);
 }
 
@@ -98,7 +101,7 @@ void sim_init(struct program list[], int n,
         (void*)_sim_memory_pool,
         (void*)(&_sim_memory_pool[MEM_POOL_WORDS-1])
     );
-    
+
     plist     = list;
     plen      = n;
     g_alg     = alg;
@@ -321,24 +324,23 @@ static void fill_snapshot(SimSnapshot *o)
 
     // dump each program’s base pointer
     for (int i = 0; i < plen; i++) {
-        fprintf(stderr,
-            "[DEBUG] Program_start_locations[%d] = %p\n",
-            i, (void*)Program_start_locations[i]);
-        struct MemoryWord *mem = Program_start_locations[i];
-        if (!mem) {
-            fprintf(stderr,
-                "[ERROR] Program %d has no memory block! skipping proc fill\n", i);
-            continue;
-        }
-
-        o->proc[i].pid   = i;
-        o->proc[i].state = atoi(mem[1].arg1);
-        o->proc[i].pc    = atoi(mem[3].arg1);
-        o->proc[i].prio  = atoi(mem[2].arg1);
-        o->proc[i].mem_lo= atoi(mem[4].arg1);
-        o->proc[i].mem_hi=      mem[4].arg2;
+            o->proc[i].pid = i;
+            if (!Program_start_locations[i]) {
+                /* not yet loaded: still NEW */
+                o->proc[i].state = NEW;
+                o->proc[i].pc    = 0;
+                o->proc[i].prio  = plist[i].priority;
+                o->proc[i].mem_lo= 0;
+                o->proc[i].mem_hi= 0;
+                continue;
+            }
+            struct MemoryWord *mem = Program_start_locations[i];
+            o->proc[i].state = atoi(mem[1].arg1);
+            o->proc[i].pc    = atoi(mem[3].arg1);
+            o->proc[i].prio  = atoi(mem[2].arg1);
+            o->proc[i].mem_lo= atoi(mem[4].arg1);
+            o->proc[i].mem_hi=      mem[4].arg2;
     }
-
     // ready queue
     fprintf(stderr,
         "[DEBUG] ready queue: items=%p, size=%d\n",
