@@ -2,18 +2,18 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build",
+      "label": "build scheduler",
       "type": "shell",
-      "command": "sh",
+      "command": "bash",
       "args": [
         "-c",
-        "gcc -g -O1 -fsanitize=address,undefined -Icore -Igui \
- core/sim.c core/utilities.c core/old_main.c gui/gui.c main.c \
- -pthread $(pkg-config --cflags --libs gtk+-3.0) \
- -o os_gui_sanitize"
+        "gcc -g -O1 -fsanitize=address,undefined -Icore -Igui core/sim.c core/utilities.c core/old_main.c gui/gui.c main.c -pthread $(pkg-config --cflags --libs gtk+-3.0) -o os_gui_sanitize"
       ],
-      "group": "build",
-      "problemMatcher": [ "$gcc" ]
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
     }
   ]
 }

@@ -72,7 +72,9 @@ void sim_reset(void)
 
 void sim_init(struct program list[], int n,
               SCHEDULING_ALGORITHM alg, int quantum)
-{
+{    
+    sim_reset();
+
     pthread_mutex_lock(&sim_mtx);
     fprintf(stderr, "[DEBUG] sim_init: plist=%p, n=%d\n", (void*)list, n);
     for(int i=0;i<n;i++){
@@ -82,7 +84,6 @@ void sim_init(struct program list[], int n,
     }
 
 
-    sim_reset();
     plist     = list;
     plen      = n;
     g_alg     = alg;

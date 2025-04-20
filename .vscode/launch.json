@@ -2,19 +2,21 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch Simulator under gdb",
+      "name": "Debug Scheduler",
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/os_gui_sanitize",
       "args": [],
-      "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
-      "externalConsole": false,
+      "preLaunchTask": "build scheduler",
       "setupCommands": [
         {
-          "description": "Enable pretty-printing",
+          "description": "Enable pretty-printing for gdb",
           "text": "-enable-pretty-printing",
           "ignoreFailures": true
         }
